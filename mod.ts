@@ -1,3 +1,4 @@
+/** Finds the path to the specified command asynchronously. */
 export async function which(command: string) {
   const systemInfo = getSystemInfo();
   if (systemInfo == null) {
@@ -15,6 +16,7 @@ export async function which(command: string) {
   return undefined;
 }
 
+/** Finds the path to the specified command synchronously. */
 export function whichSync(command: string) {
   const systemInfo = getSystemInfo();
   if (systemInfo == null) {
