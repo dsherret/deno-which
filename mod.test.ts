@@ -4,11 +4,19 @@ import {
 } from "https://deno.land/std@0.119.0/testing/asserts.ts";
 import { which, whichSync } from "./mod.ts";
 
+const expectedCurlLocation = await getLocation("curl");
+
 Deno.test("should get path", async () => {
-  const expectedLocation = await getLocation("curl");
   await runTest(async (which) => {
     const result = await which("curl");
-    checkMatches(result, expectedLocation);
+    checkMatches(result, expectedCurlLocation);
+  });
+});
+
+Deno.test("should return undefined for non-existent path", async () => {
+  await runTest(async (which) => {
+    const result = await which("asdfasdfasdfasdfasdf");
+    checkMatches(result, undefined);
   });
 });
 
@@ -19,6 +27,15 @@ Deno.test("should error when doesn't have permission", {
 }, async () => {
   await runTest(async (which) => {
     await assertRejects(() => which("curl"), Deno.errors.PermissionDenied);
+  });
+});
+
+Deno.test("should get path when using exe on windows", {
+  ignore: Deno.build.os !== "windows",
+}, async () => {
+  await runTest(async (which) => {
+    const result = await which("curl.exe");
+    checkMatches(result, expectedCurlLocation);
   });
 });
 

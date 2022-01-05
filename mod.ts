@@ -6,9 +6,16 @@ export async function which(command: string) {
   }
 
   for (const pathItem of systemInfo.pathItems) {
-    for (const entry of await safeReadDir(pathItem)) {
-      if (isMatch(systemInfo, command, entry)) {
-        return getMatchPath(pathItem, entry);
+    const filePath = pathItem + command;
+    if (await fileExists(filePath)) {
+      return filePath;
+    }
+    if (systemInfo.pathExts) {
+      for (const pathExt of systemInfo.pathExts) {
+        const filePath = pathItem + command + pathExt;
+        if (await fileExists(filePath)) {
+          return filePath;
+        }
       }
     }
   }
@@ -24,9 +31,16 @@ export function whichSync(command: string) {
   }
 
   for (const pathItem of systemInfo.pathItems) {
-    for (const entry of safeReadDirSync(pathItem)) {
-      if (isMatch(systemInfo, command, entry)) {
-        return getMatchPath(pathItem, entry);
+    const filePath = pathItem + command;
+    if (fileExistsSync(filePath)) {
+      return filePath;
+    }
+    if (systemInfo.pathExts) {
+      for (const pathExt of systemInfo.pathExts) {
+        const filePath = pathItem + command + pathExt;
+        if (fileExistsSync(filePath)) {
+          return filePath;
+        }
       }
     }
   }
@@ -34,58 +48,28 @@ export function whichSync(command: string) {
   return undefined;
 }
 
-async function safeReadDir(path: string) {
+async function fileExists(path: string) {
   try {
-    const items = [];
-    for await (const entry of await Deno.readDir(path)) {
-      items.push(entry);
-    }
-    return items;
+    const result = await Deno.stat(path);
+    return result.isFile;
   } catch (err) {
     if (err instanceof Deno.errors.PermissionDenied) {
       throw err;
     }
-    return [];
-  }
-}
-
-function safeReadDirSync(path: string) {
-  try {
-    return Deno.readDirSync(path);
-  } catch (err) {
-    if (err instanceof Deno.errors.PermissionDenied) {
-      throw err;
-    }
-    // ignore any errors
-    return [];
-  }
-}
-
-function getMatchPath(pathItem: string, entry: Deno.DirEntry) {
-  const separator = Deno.build.os === "windows" ? "\\" : "/";
-  return pathItem + separator + entry.name;
-}
-
-function isMatch(
-  systemInfo: SystemInfo,
-  command: string,
-  entry: Deno.DirEntry,
-) {
-  if (!entry.isFile) {
     return false;
   }
+}
 
-  if (systemInfo.isNameMatch(entry.name, command)) {
-    return true;
-  }
-  if (systemInfo.pathExts) {
-    for (const pathExt of systemInfo.pathExts) {
-      if (systemInfo.isNameMatch(entry.name, command + pathExt)) {
-        return true;
-      }
+function fileExistsSync(path: string) {
+  try {
+    const result = Deno.statSync(path);
+    return result.isFile;
+  } catch (err) {
+    if (err instanceof Deno.errors.PermissionDenied) {
+      throw err;
     }
+    return false;
   }
-  return false;
 }
 
 interface SystemInfo {
@@ -96,8 +80,9 @@ interface SystemInfo {
 
 function getSystemInfo(): SystemInfo | undefined {
   const isWindows = Deno.build.os === "windows";
-  const pathSeparator = isWindows ? ";" : ":";
+  const envValueSeparator = isWindows ? ";" : ":";
   const path = Deno.env.get("PATH");
+  const pathSeparator = Deno.build.os === "windows" ? "\\" : "/";
   if (path == null) {
     return undefined;
   }
@@ -106,7 +91,7 @@ function getSystemInfo(): SystemInfo | undefined {
     ? (Deno.env.get("PATHEXT") ?? ".EXE;.CMD;.BAT;.COM")
     : undefined;
   return {
-    pathItems: splitEnvValue(path),
+    pathItems: splitEnvValue(path).map((item) => normalizeDir(item)),
     pathExts: pathExt != null ? splitEnvValue(pathExt) : undefined,
     isNameMatch: isWindows
       ? (a, b) => a.toLowerCase() === b.toLowerCase()
@@ -115,8 +100,15 @@ function getSystemInfo(): SystemInfo | undefined {
 
   function splitEnvValue(value: string) {
     return value
-      .split(pathSeparator)
+      .split(envValueSeparator)
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
+  }
+
+  function normalizeDir(dirPath: string) {
+    if (!dirPath.endsWith(pathSeparator)) {
+      dirPath += pathSeparator;
+    }
+    return dirPath;
   }
 }
