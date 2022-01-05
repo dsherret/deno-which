@@ -1,21 +1,22 @@
 /** Finds the path to the specified command asynchronously. */
 export async function which(command: string) {
-  const systemInfo = getSystemInfo();
+  const systemInfo = getSystemInfo(command);
   if (systemInfo == null) {
     return undefined;
   }
 
   for (const pathItem of systemInfo.pathItems) {
     const filePath = pathItem + command;
-    if (await fileExists(filePath)) {
-      return filePath;
-    }
     if (systemInfo.pathExts) {
       for (const pathExt of systemInfo.pathExts) {
         const filePath = pathItem + command + pathExt;
         if (await fileExists(filePath)) {
           return filePath;
         }
+      }
+    } else {
+      if (await fileExists(filePath)) {
+        return filePath;
       }
     }
   }
@@ -25,7 +26,7 @@ export async function which(command: string) {
 
 /** Finds the path to the specified command synchronously. */
 export function whichSync(command: string) {
-  const systemInfo = getSystemInfo();
+  const systemInfo = getSystemInfo(command);
   if (systemInfo == null) {
     return undefined;
   }
@@ -78,7 +79,7 @@ interface SystemInfo {
   isNameMatch: (a: string, b: string) => boolean;
 }
 
-function getSystemInfo(): SystemInfo | undefined {
+function getSystemInfo(command: string): SystemInfo | undefined {
   const isWindows = Deno.build.os === "windows";
   const envValueSeparator = isWindows ? ";" : ":";
   const path = Deno.env.get("PATH");
@@ -87,16 +88,33 @@ function getSystemInfo(): SystemInfo | undefined {
     return undefined;
   }
 
-  const pathExt = isWindows
-    ? (Deno.env.get("PATHEXT") ?? ".EXE;.CMD;.BAT;.COM")
-    : undefined;
   return {
     pathItems: splitEnvValue(path).map((item) => normalizeDir(item)),
-    pathExts: pathExt != null ? splitEnvValue(pathExt) : undefined,
+    pathExts: getPathExts(),
     isNameMatch: isWindows
       ? (a, b) => a.toLowerCase() === b.toLowerCase()
       : (a, b) => a === b,
   };
+
+  function getPathExts() {
+    if (!isWindows) {
+      return undefined;
+    }
+
+    const pathExtText = Deno.env.get("PATHEXT") ?? ".EXE;.CMD;.BAT;.COM";
+    const pathExts = splitEnvValue(pathExtText);
+    const lowerCaseCommand = command.toLowerCase();
+
+    for (const pathExt of pathExts) {
+      // Do not use the pathExts if someone has provided a command
+      // that ends with the extenion of an executable extension
+      if (lowerCaseCommand.endsWith(pathExt.toLowerCase())) {
+        return undefined;
+      }
+    }
+
+    return pathExts;
+  }
 
   function splitEnvValue(value: string) {
     return value
