@@ -83,7 +83,7 @@ function getSystemInfo(command: string): SystemInfo | undefined {
   const isWindows = Deno.build.os === "windows";
   const envValueSeparator = isWindows ? ";" : ":";
   const path = Deno.env.get("PATH");
-  const pathSeparator = Deno.build.os === "windows" ? "\\" : "/";
+  const pathSeparator = isWindows ? "\\" : "/";
   if (path == null) {
     return undefined;
   }
