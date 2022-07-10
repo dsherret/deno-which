@@ -1,6 +1,54 @@
+export interface Environment {
+  /** Gets an environment variable. */
+  env(key: string): string | undefined;
+  /** Checks if the file exists asynchronously. */
+  fileExists(filePath: string): Promise<boolean>;
+  /** Checks if the file exists synchronously. */
+  fileExistsSync(filePath: string): boolean;
+  /** Gets the current operating system. */
+  os: "darwin" | "linux" | "windows";
+}
+
+class RealEnvironment implements Environment {
+  env(key: string): string | undefined {
+    return Deno.env.get(key);
+  }
+
+  async fileExists(path: string): Promise<boolean> {
+    try {
+      const result = await Deno.stat(path);
+      return result.isFile;
+    } catch (err) {
+      if (err instanceof Deno.errors.PermissionDenied) {
+        throw err;
+      }
+      return false;
+    }
+  }
+
+  fileExistsSync(path: string): boolean {
+    try {
+      const result = Deno.statSync(path);
+      return result.isFile;
+    } catch (err) {
+      if (err instanceof Deno.errors.PermissionDenied) {
+        throw err;
+      }
+      return false;
+    }
+  }
+
+  get os() {
+    return Deno.build.os;
+  }
+}
+
 /** Finds the path to the specified command asynchronously. */
-export async function which(command: string) {
-  const systemInfo = getSystemInfo(command);
+export async function which(
+  command: string,
+  environment: Environment = new RealEnvironment(),
+) {
+  const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
     return undefined;
   }
@@ -10,12 +58,12 @@ export async function which(command: string) {
     if (systemInfo.pathExts) {
       for (const pathExt of systemInfo.pathExts) {
         const filePath = pathItem + command + pathExt;
-        if (await fileExists(filePath)) {
+        if (await environment.fileExists(filePath)) {
           return filePath;
         }
       }
     } else {
-      if (await fileExists(filePath)) {
+      if (await environment.fileExists(filePath)) {
         return filePath;
       }
     }
@@ -25,21 +73,24 @@ export async function which(command: string) {
 }
 
 /** Finds the path to the specified command synchronously. */
-export function whichSync(command: string) {
-  const systemInfo = getSystemInfo(command);
+export function whichSync(
+  command: string,
+  environment: Environment = new RealEnvironment(),
+) {
+  const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
     return undefined;
   }
 
   for (const pathItem of systemInfo.pathItems) {
     const filePath = pathItem + command;
-    if (fileExistsSync(filePath)) {
+    if (environment.fileExistsSync(filePath)) {
       return filePath;
     }
     if (systemInfo.pathExts) {
       for (const pathExt of systemInfo.pathExts) {
         const filePath = pathItem + command + pathExt;
-        if (fileExistsSync(filePath)) {
+        if (environment.fileExistsSync(filePath)) {
           return filePath;
         }
       }
@@ -49,41 +100,20 @@ export function whichSync(command: string) {
   return undefined;
 }
 
-async function fileExists(path: string) {
-  try {
-    const result = await Deno.stat(path);
-    return result.isFile;
-  } catch (err) {
-    if (err instanceof Deno.errors.PermissionDenied) {
-      throw err;
-    }
-    return false;
-  }
-}
-
-function fileExistsSync(path: string) {
-  try {
-    const result = Deno.statSync(path);
-    return result.isFile;
-  } catch (err) {
-    if (err instanceof Deno.errors.PermissionDenied) {
-      throw err;
-    }
-    return false;
-  }
-}
-
 interface SystemInfo {
   pathItems: string[];
   pathExts: string[] | undefined;
   isNameMatch: (a: string, b: string) => boolean;
 }
 
-function getSystemInfo(command: string): SystemInfo | undefined {
-  const isWindows = Deno.build.os === "windows";
+function getSystemInfo(
+  command: string,
+  environment: Environment,
+): SystemInfo | undefined {
+  const isWindows = environment.os === "windows";
   const envValueSeparator = isWindows ? ";" : ":";
-  const path = Deno.env.get("PATH");
-  const pathSeparator = Deno.build.os === "windows" ? "\\" : "/";
+  const path = environment.env("PATH");
+  const pathSeparator = environment.os === "windows" ? "\\" : "/";
   if (path == null) {
     return undefined;
   }
@@ -101,7 +131,7 @@ function getSystemInfo(command: string): SystemInfo | undefined {
       return undefined;
     }
 
-    const pathExtText = Deno.env.get("PATHEXT") ?? ".EXE;.CMD;.BAT;.COM";
+    const pathExtText = environment.env("PATHEXT") ?? ".EXE;.CMD;.BAT;.COM";
     const pathExts = splitEnvValue(pathExtText);
     const lowerCaseCommand = command.toLowerCase();
 
