@@ -113,7 +113,7 @@ function getSystemInfo(
   const isWindows = environment.os === "windows";
   const envValueSeparator = isWindows ? ";" : ":";
   const path = environment.env("PATH");
-  const pathSeparator = environment.os === "windows" ? "\\" : "/";
+  const pathSeparator = isWindows ? "\\" : "/";
   if (path == null) {
     return undefined;
   }
