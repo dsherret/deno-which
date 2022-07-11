@@ -41,7 +41,10 @@ Deno.test("should get path when using exe on windows", {
 
 async function runTest(
   action: (
-    whichFunction: (cmd: string, environment?: Environment) => Promise<string | undefined>,
+    whichFunction: (
+      cmd: string,
+      environment?: Environment,
+    ) => Promise<string | undefined>,
   ) => Promise<void>,
 ) {
   await action(which);
@@ -86,7 +89,7 @@ Deno.test("should get existent path when providing a custom system", async () =>
     const environment: Environment = {
       env(key) {
         if (key === "PATH") {
-          return "C:\\test\\home;C:\\other"
+          return "C:\\test\\home;C:\\other";
         } else if (key === "PATHEXT") {
           return ".BAT;.EXE";
         } else {

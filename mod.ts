@@ -46,7 +46,7 @@ class RealEnvironment implements Environment {
 /** Finds the path to the specified command asynchronously. */
 export async function which(
   command: string,
-  environment: Environment = new RealEnvironment(),
+  environment: Omit<Environment, "fileExistsSync"> = new RealEnvironment(),
 ) {
   const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
@@ -75,7 +75,7 @@ export async function which(
 /** Finds the path to the specified command synchronously. */
 export function whichSync(
   command: string,
-  environment: Environment = new RealEnvironment(),
+  environment: Omit<Environment, "fileExists"> = new RealEnvironment(),
 ) {
   const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
@@ -108,7 +108,7 @@ interface SystemInfo {
 
 function getSystemInfo(
   command: string,
-  environment: Environment,
+  environment: Omit<Environment, "fileExists" | "fileExistsSync">,
 ): SystemInfo | undefined {
   const isWindows = environment.os === "windows";
   const envValueSeparator = isWindows ? ";" : ":";
