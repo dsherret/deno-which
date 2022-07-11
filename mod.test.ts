@@ -1,8 +1,8 @@
 import {
   assertEquals,
   assertRejects,
-} from "https://deno.land/std@0.119.0/testing/asserts.ts";
-import { which, whichSync } from "./mod.ts";
+} from "https://deno.land/std@0.147.0/testing/asserts.ts";
+import { Environment, which, whichSync } from "./mod.ts";
 
 const expectedCurlLocation = await getLocation("curl");
 
@@ -41,13 +41,16 @@ Deno.test("should get path when using exe on windows", {
 
 async function runTest(
   action: (
-    whichFunction: (cmd: string) => Promise<string | undefined>,
+    whichFunction: (
+      cmd: string,
+      environment?: Environment,
+    ) => Promise<string | undefined>,
   ) => Promise<void>,
 ) {
   await action(which);
-  await action((cmd) => {
+  await action((cmd, environment) => {
     try {
-      return Promise.resolve(whichSync(cmd));
+      return Promise.resolve(whichSync(cmd, environment));
     } catch (err) {
       return Promise.reject(err);
     }
@@ -80,3 +83,39 @@ async function getLocation(command: string) {
     p.close();
   }
 }
+
+Deno.test("should get existent path when providing a custom system", async () => {
+  await runTest(async (which) => {
+    const environment: Environment = {
+      env(key) {
+        if (key === "PATH") {
+          return "C:\\test\\home;C:\\other";
+        } else if (key === "PATHEXT") {
+          return ".BAT;.EXE";
+        } else {
+          return undefined;
+        }
+      },
+      fileExists(path) {
+        path = path.replace(/\//g, "\\");
+        if (path === "C:\\test\\home\\asdfasdfasdfasdfasdf.EXE") {
+          return Promise.resolve(true);
+        } else {
+          return Promise.resolve(false);
+        }
+      },
+      fileExistsSync(path) {
+        path = path.replace(/\//g, "\\");
+        if (path === "C:\\test\\home\\asdfasdfasdfasdfasdf.EXE") {
+          return true;
+        } else {
+          return false;
+        }
+      },
+      os: "windows",
+    };
+    let result = await which("asdfasdfasdfasdfasdf", environment);
+    result = result?.replace(/\//g, "\\");
+    assertEquals(result, "C:\\test\\home\\asdfasdfasdfasdfasdf.EXE");
+  });
+});
