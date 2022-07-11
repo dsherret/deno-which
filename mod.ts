@@ -9,7 +9,7 @@ export interface Environment {
   os: "darwin" | "linux" | "windows";
 }
 
-class RealEnvironment implements Environment {
+export class RealEnvironment implements Environment {
   env(key: string): string | undefined {
     return Deno.env.get(key);
   }
