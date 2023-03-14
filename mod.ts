@@ -6,7 +6,7 @@ export interface Environment {
   /** Checks if the file exists synchronously. */
   fileExistsSync(filePath: string): boolean;
   /** Gets the current operating system. */
-  os: "darwin" | "linux" | "windows";
+  os: typeof Deno.build.os;
 }
 
 export class RealEnvironment implements Environment {
