@@ -1,10 +1,14 @@
 export interface Environment {
   /** Gets an environment variable. */
   env(key: string): string | undefined;
-  /** Checks if the file exists asynchronously. */
-  fileExists(filePath: string): Promise<boolean>;
-  /** Checks if the file exists synchronously. */
-  fileExistsSync(filePath: string): boolean;
+  /** Resolves the `Deno.FileInfo` for the specified
+   * path following symlinks.
+   */
+  stat(filePath: string): Promise<Pick<Deno.FileInfo, "isFile">>;
+  /** Synchronously resolves the `Deno.FileInfo` for
+   * the specified path following symlinks.
+   */
+  statSync(filePath: string): Pick<Deno.FileInfo, "isFile">;
   /** Gets the current operating system. */
   os: typeof Deno.build.os;
 }
@@ -14,28 +18,12 @@ export class RealEnvironment implements Environment {
     return Deno.env.get(key);
   }
 
-  async fileExists(path: string): Promise<boolean> {
-    try {
-      const result = await Deno.stat(path);
-      return result.isFile;
-    } catch (err) {
-      if (err instanceof Deno.errors.PermissionDenied) {
-        throw err;
-      }
-      return false;
-    }
+  stat(path: string): Promise<Deno.FileInfo> {
+    return Deno.stat(path);
   }
 
-  fileExistsSync(path: string): boolean {
-    try {
-      const result = Deno.statSync(path);
-      return result.isFile;
-    } catch (err) {
-      if (err instanceof Deno.errors.PermissionDenied) {
-        throw err;
-      }
-      return false;
-    }
+  statSync(path: string): Deno.FileInfo {
+    return Deno.statSync(path);
   }
 
   get os() {
@@ -46,7 +34,7 @@ export class RealEnvironment implements Environment {
 /** Finds the path to the specified command asynchronously. */
 export async function which(
   command: string,
-  environment: Omit<Environment, "fileExistsSync"> = new RealEnvironment(),
+  environment: Omit<Environment, "statSync"> = new RealEnvironment(),
 ) {
   const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
@@ -58,12 +46,12 @@ export async function which(
     if (systemInfo.pathExts) {
       for (const pathExt of systemInfo.pathExts) {
         const filePath = pathItem + command + pathExt;
-        if (await environment.fileExists(filePath)) {
+        if (await pathMatches(environment, filePath)) {
           return filePath;
         }
       }
     } else {
-      if (await environment.fileExists(filePath)) {
+      if (await pathMatches(environment, filePath)) {
         return filePath;
       }
     }
@@ -72,10 +60,25 @@ export async function which(
   return undefined;
 }
 
+async function pathMatches(
+  environment: Omit<Environment, "statSync">,
+  path: string,
+): Promise<boolean> {
+  try {
+    const result = await environment.stat(path);
+    return result.isFile;
+  } catch (err) {
+    if (err instanceof Deno.errors.PermissionDenied) {
+      throw err;
+    }
+    return false;
+  }
+}
+
 /** Finds the path to the specified command synchronously. */
 export function whichSync(
   command: string,
-  environment: Omit<Environment, "fileExists"> = new RealEnvironment(),
+  environment: Omit<Environment, "stat"> = new RealEnvironment(),
 ) {
   const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
@@ -84,13 +87,13 @@ export function whichSync(
 
   for (const pathItem of systemInfo.pathItems) {
     const filePath = pathItem + command;
-    if (environment.fileExistsSync(filePath)) {
+    if (pathMatchesSync(environment, filePath)) {
       return filePath;
     }
     if (systemInfo.pathExts) {
       for (const pathExt of systemInfo.pathExts) {
         const filePath = pathItem + command + pathExt;
-        if (environment.fileExistsSync(filePath)) {
+        if (pathMatchesSync(environment, filePath)) {
           return filePath;
         }
       }
@@ -98,6 +101,21 @@ export function whichSync(
   }
 
   return undefined;
+}
+
+function pathMatchesSync(
+  environment: Omit<Environment, "stat">,
+  path: string,
+): boolean {
+  try {
+    const result = environment.statSync(path);
+    return result.isFile;
+  } catch (err) {
+    if (err instanceof Deno.errors.PermissionDenied) {
+      throw err;
+    }
+    return false;
+  }
 }
 
 interface SystemInfo {
@@ -108,7 +126,7 @@ interface SystemInfo {
 
 function getSystemInfo(
   command: string,
-  environment: Omit<Environment, "fileExists" | "fileExistsSync">,
+  environment: Omit<Environment, "stat" | "statSync">,
 ): SystemInfo | undefined {
   const isWindows = environment.os === "windows";
   const envValueSeparator = isWindows ? ";" : ":";
