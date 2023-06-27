@@ -87,15 +87,16 @@ export function whichSync(
 
   for (const pathItem of systemInfo.pathItems) {
     const filePath = pathItem + command;
-    if (pathMatchesSync(environment, filePath)) {
-      return filePath;
-    }
     if (systemInfo.pathExts) {
       for (const pathExt of systemInfo.pathExts) {
         const filePath = pathItem + command + pathExt;
         if (pathMatchesSync(environment, filePath)) {
           return filePath;
         }
+      }
+    } else {
+      if (pathMatchesSync(environment, filePath)) {
+        return filePath;
       }
     }
   }
