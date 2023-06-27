@@ -130,15 +130,11 @@ async function getLocation(command: string) {
   const cmd = Deno.build.os === "windows"
     ? ["cmd", "/c", "where", command]
     : ["which", command];
-  const p = await Deno.run({
-    cmd,
+  const p = await new Deno.Command(cmd[0], {
+    args: cmd.slice(1),
     stdout: "piped",
-  });
-  try {
-    return new TextDecoder().decode(await p.output()).split(/\r?\n/)[0];
-  } finally {
-    p.close();
-  }
+  }).output();
+  return new TextDecoder().decode(p.stdout).split(/\r?\n/)[0];
 }
 
 async function withTempDir(action: (path: string) => Promise<void> | void) {
