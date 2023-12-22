@@ -18,15 +18,15 @@ export class RealEnvironment implements Environment {
     return Deno.env.get(key);
   }
 
-  stat(path: string): Promise<Deno.FileInfo> {
+  stat(path: string): Promise<Pick<Deno.FileInfo, "isFile">> {
     return Deno.stat(path);
   }
 
-  statSync(path: string): Deno.FileInfo {
+  statSync(path: string): Pick<Deno.FileInfo, "isFile"> {
     return Deno.statSync(path);
   }
 
-  get os() {
+  get os(): typeof Deno.build.os {
     return Deno.build.os;
   }
 }
@@ -35,7 +35,7 @@ export class RealEnvironment implements Environment {
 export async function which(
   command: string,
   environment: Omit<Environment, "statSync"> = new RealEnvironment(),
-) {
+): Promise<string | undefined> {
   const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
     return undefined;
@@ -79,7 +79,7 @@ async function pathMatches(
 export function whichSync(
   command: string,
   environment: Omit<Environment, "stat"> = new RealEnvironment(),
-) {
+): string | undefined {
   const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
     return undefined;
