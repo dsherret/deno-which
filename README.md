@@ -4,8 +4,12 @@
 
 Finds the path to the specified command.
 
+```sh
+> deno add @david/which
+```
+
 ```ts
-import { which, whichSync } from "jsr:@david/which@0.3";
+import { which, whichSync } from "@david/which";
 
 const pathToCurl = await which("curl");
 ```
