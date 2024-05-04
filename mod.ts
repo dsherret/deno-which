@@ -11,8 +11,14 @@ export interface Environment {
   statSync(filePath: string): Pick<Deno.FileInfo, "isFile">;
   /** Gets the current operating system. */
   os: typeof Deno.build.os;
+  /** Optional method for requesting broader permissions for a folder
+   * instead of asking for each file. This is not the default, but
+   * useful on Windows for example.
+   */
+  requestPermission?(folderPath: string): void;
 }
 
+/** Default implementation that interacts with the file system and process env vars. */
 export class RealEnvironment implements Environment {
   env(key: string): string | undefined {
     return Deno.env.get(key);
@@ -42,6 +48,8 @@ export async function which(
   }
 
   for (const pathItem of systemInfo.pathItems) {
+    environment.requestPermission?.(pathItem);
+
     const filePath = pathItem + command;
     if (systemInfo.pathExts) {
       for (const pathExt of systemInfo.pathExts) {
@@ -86,6 +94,8 @@ export function whichSync(
   }
 
   for (const pathItem of systemInfo.pathItems) {
+    environment.requestPermission?.(pathItem);
+
     const filePath = pathItem + command;
     if (pathMatchesSync(environment, filePath)) {
       return filePath;
