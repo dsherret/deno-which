@@ -2,7 +2,7 @@ import {
   assertEquals,
   assertRejects,
 } from "https://deno.land/std@0.182.0/testing/asserts.ts";
-import { Environment, which, whichSync } from "./mod.ts";
+import { type Environment, which, whichSync } from "./mod.ts";
 
 const expectedCurlLocation = await getLocation("curl");
 

@@ -1,4 +1,5 @@
 export interface Environment {
+  requestPermission?(folderPath: string): void;
   /** Gets an environment variable. */
   env(key: string): string | undefined;
   /** Resolves the `Deno.FileInfo` for the specified
@@ -13,6 +14,7 @@ export interface Environment {
   os: typeof Deno.build.os;
 }
 
+/** Default implementation that interacts with the file system and process env vars. */
 export class RealEnvironment implements Environment {
   env(key: string): string | undefined {
     return Deno.env.get(key);
@@ -42,6 +44,8 @@ export async function which(
   }
 
   for (const pathItem of systemInfo.pathItems) {
+    environment.requestPermission?.(pathItem);
+
     const filePath = pathItem + command;
     if (systemInfo.pathExts) {
       for (const pathExt of systemInfo.pathExts) {
@@ -86,6 +90,8 @@ export function whichSync(
   }
 
   for (const pathItem of systemInfo.pathItems) {
+    environment.requestPermission?.(pathItem);
+
     const filePath = pathItem + command;
     if (pathMatchesSync(environment, filePath)) {
       return filePath;

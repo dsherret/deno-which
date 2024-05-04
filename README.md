@@ -26,5 +26,11 @@ const pathToCurl = await which("curl", {
   env(key: string) {
     // implement getting an environment variable
   },
+  requestPermission(folderPath: string): void {
+    Deno.permissions.requestSync({
+      name: "read",
+      path: folderPath,
+    });
+  }
 });
 ```

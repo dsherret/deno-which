@@ -12,6 +12,9 @@ jobs:
   test:
     name: ${{ matrix.config.kind }} ${{ matrix.config.os }}
     runs-on: ${{ matrix.config.os }}
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       matrix:
         config:
@@ -41,3 +44,7 @@ jobs:
 
       - name: Run tests
         run: deno test -A
+
+      - name: Publish to JSR on tag
+        if: startsWith(matrix.config.os, 'ubuntu')
+        run: deno run -A jsr:@david/publish-on-tag@0.1.3
