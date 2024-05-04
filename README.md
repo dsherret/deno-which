@@ -31,6 +31,6 @@ const pathToCurl = await which("curl", {
       name: "read",
       path: folderPath,
     });
-  }
+  },
 });
 ```
