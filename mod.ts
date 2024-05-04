@@ -1,5 +1,4 @@
 export interface Environment {
-  requestPermission?(folderPath: string): void;
   /** Gets an environment variable. */
   env(key: string): string | undefined;
   /** Resolves the `Deno.FileInfo` for the specified
@@ -12,6 +11,11 @@ export interface Environment {
   statSync(filePath: string): Pick<Deno.FileInfo, "isFile">;
   /** Gets the current operating system. */
   os: typeof Deno.build.os;
+  /** Optional method for requesting broader permissions for a folder
+   * instead of asking for each file. This is not the default, but
+   * useful on Windows for example.
+   */
+  requestPermission?(folderPath: string): void;
 }
 
 /** Default implementation that interacts with the file system and process env vars. */
