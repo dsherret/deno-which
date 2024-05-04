@@ -58,10 +58,8 @@ export async function which(
           return filePath;
         }
       }
-    } else {
-      if (await pathMatches(environment, filePath)) {
-        return filePath;
-      }
+    } else if (await pathMatches(environment, filePath)) {
+      return filePath;
     }
   }
 
@@ -97,9 +95,6 @@ export function whichSync(
     environment.requestPermission?.(pathItem);
 
     const filePath = pathItem + command;
-    if (pathMatchesSync(environment, filePath)) {
-      return filePath;
-    }
     if (systemInfo.pathExts) {
       for (const pathExt of systemInfo.pathExts) {
         const filePath = pathItem + command + pathExt;
@@ -107,6 +102,8 @@ export function whichSync(
           return filePath;
         }
       }
+    } else if (pathMatchesSync(environment, filePath)) {
+      return filePath;
     }
   }
 
