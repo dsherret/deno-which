@@ -50,10 +50,8 @@ export async function which(
           return filePath;
         }
       }
-    } else {
-      if (await pathMatches(environment, filePath)) {
-        return filePath;
-      }
+    } else if (await pathMatches(environment, filePath)) {
+      return filePath;
     }
   }
 
@@ -94,10 +92,8 @@ export function whichSync(
           return filePath;
         }
       }
-    } else {
-      if (pathMatchesSync(environment, filePath)) {
-        return filePath;
-      }
+    } else if (pathMatchesSync(environment, filePath)) {
+      return filePath;
     }
   }
 

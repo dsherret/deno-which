@@ -39,6 +39,33 @@ Deno.test("should get path when using exe on windows", {
   });
 });
 
+Deno.test("should get exe on windows when file exists with no extension", {
+  ignore: Deno.build.os !== "windows",
+}, async () => {
+  await withTempDir(async (path) => {
+    const originalPath = Deno.env.get("PATH")!;
+    try {
+      const curlWithExePath = path + "\\curl.exe";
+      Deno.copyFileSync(expectedCurlLocation, curlWithExePath);
+      Deno.copyFileSync(expectedCurlLocation, path + "\\curl");
+      Deno.env.set(
+        "PATH",
+        path + ";" + originalPath,
+      );
+      assertEquals(
+        (await which("curl"))?.toLowerCase(),
+        curlWithExePath.toLowerCase(),
+      );
+      assertEquals(
+        whichSync("curl")?.toLowerCase(),
+        curlWithExePath.toLowerCase(),
+      );
+    } finally {
+      Deno.env.set("PATH", originalPath);
+    }
+  });
+});
+
 Deno.test("should get existent path when providing a custom system", async () => {
   await runTest(async (which) => {
     const environment: Environment = {
