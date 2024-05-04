@@ -1,14 +1,11 @@
-# deno_which
+# deno-which
 
-[![deno doc](https://doc.deno.land/badge.svg)](https://doc.deno.land/https/deno.land/x/which/mod.ts)
+[![deno doc](https://jsr.io/badges/@david/which)](https://jsr.io/@david/which)
 
 Finds the path to the specified command.
 
 ```ts
-import {
-  which,
-  whichSync,
-} from "https://deno.land/x/which@VERSION_GOES_HERE/mod.ts";
+import { which, whichSync } from "jsr:@david/which@0.3";
 
 const pathToCurl = await which("curl");
 ```
@@ -28,6 +25,13 @@ const pathToCurl = await which("curl", {
   },
   env(key: string) {
     // implement getting an environment variable
+  },
+  // optional method for requesting broader permissions for a folder
+  requestPermission(folderPath: string): void {
+    Deno.permissions.requestSync({
+      name: "read",
+      path: folderPath,
+    });
   },
 });
 ```

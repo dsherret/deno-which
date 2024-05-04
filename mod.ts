@@ -11,22 +11,28 @@ export interface Environment {
   statSync(filePath: string): Pick<Deno.FileInfo, "isFile">;
   /** Gets the current operating system. */
   os: typeof Deno.build.os;
+  /** Optional method for requesting broader permissions for a folder
+   * instead of asking for each file. This is not the default, but
+   * useful on Windows for example.
+   */
+  requestPermission?(folderPath: string): void;
 }
 
+/** Default implementation that interacts with the file system and process env vars. */
 export class RealEnvironment implements Environment {
   env(key: string): string | undefined {
     return Deno.env.get(key);
   }
 
-  stat(path: string): Promise<Deno.FileInfo> {
+  stat(path: string): Promise<Pick<Deno.FileInfo, "isFile">> {
     return Deno.stat(path);
   }
 
-  statSync(path: string): Deno.FileInfo {
+  statSync(path: string): Pick<Deno.FileInfo, "isFile"> {
     return Deno.statSync(path);
   }
 
-  get os() {
+  get os(): typeof Deno.build.os {
     return Deno.build.os;
   }
 }
@@ -35,13 +41,15 @@ export class RealEnvironment implements Environment {
 export async function which(
   command: string,
   environment: Omit<Environment, "statSync"> = new RealEnvironment(),
-) {
+): Promise<string | undefined> {
   const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
     return undefined;
   }
 
   for (const pathItem of systemInfo.pathItems) {
+    environment.requestPermission?.(pathItem);
+
     const filePath = pathItem + command;
     if (systemInfo.pathExts) {
       for (const pathExt of systemInfo.pathExts) {
@@ -77,13 +85,15 @@ async function pathMatches(
 export function whichSync(
   command: string,
   environment: Omit<Environment, "stat"> = new RealEnvironment(),
-) {
+): string | undefined {
   const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
     return undefined;
   }
 
   for (const pathItem of systemInfo.pathItems) {
+    environment.requestPermission?.(pathItem);
+
     const filePath = pathItem + command;
     if (systemInfo.pathExts) {
       for (const pathExt of systemInfo.pathExts) {
