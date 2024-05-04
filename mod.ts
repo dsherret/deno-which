@@ -14,7 +14,7 @@ export interface Environment {
   /** Optional method for requesting broader permissions for a folder
    * instead of asking for each file when the operating system requires
    * probing multiple files for an executable path.
-   * 
+   *
    * This is not the default, but is useful on Windows for example.
    */
   requestPermission?(folderPath: string): void;
