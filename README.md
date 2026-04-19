@@ -24,10 +24,10 @@ For example:
 ```ts
 const pathToCurl = await which("curl", {
   os: "windows",
-  async fileExists(filePath: string) {
+  async stat(filePath: string): Promise<Pick<Deno.FileInfo, "isFile">> {
     // implement this
   },
-  env(key: string) {
+  env(key: string): string | undefined {
     // implement getting an environment variable
   },
   // optional method for requesting broader permissions for a folder
