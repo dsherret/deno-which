@@ -1,16 +1,25 @@
+/** Operating system identifier returned by {@linkcode Environment.os}. */
+export type OsType =
+  | "darwin"
+  | "linux"
+  | "windows"
+  | "freebsd"
+  | "netbsd"
+  | "aix"
+  | "solaris"
+  | "illumos";
+
 export interface Environment {
   /** Gets an environment variable. */
   env(key: string): string | undefined;
-  /** Resolves the `Deno.FileInfo` for the specified
-   * path following symlinks.
+  /** Resolves the file info for the specified path following symlinks. */
+  stat(filePath: string): Promise<{ isFile: boolean }>;
+  /** Synchronously resolves the file info for the specified path
+   * following symlinks.
    */
-  stat(filePath: string): Promise<Pick<Deno.FileInfo, "isFile">>;
-  /** Synchronously resolves the `Deno.FileInfo` for
-   * the specified path following symlinks.
-   */
-  statSync(filePath: string): Pick<Deno.FileInfo, "isFile">;
+  statSync(filePath: string): { isFile: boolean };
   /** Gets the current operating system. */
-  os: typeof Deno.build.os;
+  os: OsType;
   /** Optional method for requesting broader permissions for a folder
    * instead of asking for each file when the operating system requires
    * probing multiple files for an executable path.
@@ -20,22 +29,48 @@ export interface Environment {
   requestPermission?(folderPath: string): void;
 }
 
+// deno-lint-ignore no-explicit-any
+const denoGlobal: any = (globalThis as any).Deno;
+const isDeno = denoGlobal != null;
+// deno-lint-ignore no-explicit-any
+const nodeProcess: any = isDeno ? undefined : (globalThis as any).process;
+// deno-lint-ignore no-explicit-any
+const nodeFs: any = isDeno
+  ? undefined
+  : nodeProcess.getBuiltinModule("node:fs");
+
 /** Default implementation that interacts with the file system and process env vars. */
 export class RealEnvironment implements Environment {
   env(key: string): string | undefined {
-    return Deno.env.get(key);
+    if (isDeno) {
+      return denoGlobal.env.get(key);
+    }
+    return nodeProcess.env[key];
   }
 
-  stat(path: string): Promise<Pick<Deno.FileInfo, "isFile">> {
-    return Deno.stat(path);
+  async stat(path: string): Promise<{ isFile: boolean }> {
+    if (isDeno) {
+      return await denoGlobal.stat(path);
+    }
+    const info = await nodeFs.promises.stat(path);
+    return { isFile: info.isFile() };
   }
 
-  statSync(path: string): Pick<Deno.FileInfo, "isFile"> {
-    return Deno.statSync(path);
+  statSync(path: string): { isFile: boolean } {
+    if (isDeno) {
+      return denoGlobal.statSync(path);
+    }
+    const info = nodeFs.statSync(path);
+    return { isFile: info.isFile() };
   }
 
-  get os(): typeof Deno.build.os {
-    return Deno.build.os;
+  get os(): OsType {
+    if (isDeno) {
+      return denoGlobal.build.os;
+    }
+    return nodeProcess.platform === "win32"
+      ? "windows"
+      : (nodeProcess.platform as OsType);
   }
 }
 
@@ -76,7 +111,7 @@ async function pathMatches(
     const result = await environment.stat(path);
     return result.isFile;
   } catch (err) {
-    if (err instanceof Deno.errors.PermissionDenied) {
+    if (isPermissionDeniedError(err)) {
       throw err;
     }
     return false;
@@ -120,11 +155,15 @@ function pathMatchesSync(
     const result = environment.statSync(path);
     return result.isFile;
   } catch (err) {
-    if (err instanceof Deno.errors.PermissionDenied) {
+    if (isPermissionDeniedError(err)) {
       throw err;
     }
     return false;
   }
+}
+
+function isPermissionDeniedError(err: unknown): boolean {
+  return isDeno && err instanceof denoGlobal.errors.PermissionDenied;
 }
 
 interface SystemInfo {
