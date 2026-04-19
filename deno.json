@@ -1,6 +1,5 @@
 {
   "name": "@david/which",
-  "version": "0.0.0",
   "exports": "./mod.ts",
   "exclude": [
     ".github",
