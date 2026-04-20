@@ -87,7 +87,7 @@ test("should get existent path when providing a custom system", async () => {
           throw new Error("Not found.");
         }
       },
-      os: "windows",
+      isWindows: true,
     };
     let result = await which("asdfasdfasdfasdfasdf", environment);
     result = result?.replace(/\//g, "\\");
