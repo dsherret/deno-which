@@ -1,14 +1,3 @@
-/** Operating system identifier returned by {@linkcode Environment.os}. */
-export type OsType =
-  | "darwin"
-  | "linux"
-  | "windows"
-  | "freebsd"
-  | "netbsd"
-  | "aix"
-  | "solaris"
-  | "illumos";
-
 export interface Environment {
   /** Gets an environment variable. */
   env(key: string): string | undefined;
@@ -18,8 +7,8 @@ export interface Environment {
    * following symlinks.
    */
   statSync(filePath: string): { isFile: boolean };
-  /** Gets the current operating system. */
-  os: OsType;
+  /** Whether the current operating system is Windows. */
+  isWindows: boolean;
   /** Optional method for requesting broader permissions for a folder
    * instead of asking for each file when the operating system requires
    * probing multiple files for an executable path.
@@ -64,13 +53,11 @@ export class RealEnvironment implements Environment {
     return { isFile: info.isFile() };
   }
 
-  get os(): OsType {
+  get isWindows(): boolean {
     if (isDeno) {
-      return denoGlobal.build.os;
+      return denoGlobal.build.os === "windows";
     }
-    return nodeProcess.platform === "win32"
-      ? "windows"
-      : (nodeProcess.platform as OsType);
+    return nodeProcess.platform === "win32";
   }
 }
 
@@ -176,7 +163,7 @@ function getSystemInfo(
   command: string,
   environment: Omit<Environment, "stat" | "statSync">,
 ): SystemInfo | undefined {
-  const isWindows = environment.os === "windows";
+  const isWindows = environment.isWindows;
   const envValueSeparator = isWindows ? ";" : ":";
   const path = environment.env("PATH");
   const pathSeparator = isWindows ? "\\" : "/";

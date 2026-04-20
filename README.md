@@ -27,7 +27,7 @@ For example:
 
 ```ts
 const pathToCurl = await which("curl", {
-  os: "windows",
+  isWindows: true,
   async stat(filePath: string): Promise<{ isFile: boolean }> {
     // implement this
   },
