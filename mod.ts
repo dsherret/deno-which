@@ -18,6 +18,7 @@ export interface Environment {
   requestPermission?(folderPath: string): void;
 }
 
+// dnt-shim-ignore
 // deno-lint-ignore no-explicit-any
 const denoGlobal: any = (globalThis as any).Deno;
 const isDeno = denoGlobal != null;
