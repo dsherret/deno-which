@@ -21,41 +21,41 @@ export interface Environment {
 // dnt-shim-ignore
 // deno-lint-ignore no-explicit-any
 const denoGlobal: any = (globalThis as any).Deno;
-const isDeno = denoGlobal != null;
+const nodeProcess = globalThis.process;
 // deno-lint-ignore no-explicit-any
-const nodeProcess: any = isDeno ? undefined : (globalThis as any).process;
+let nodeFs: any | undefined;
 // deno-lint-ignore no-explicit-any
-const nodeFs: any = isDeno
-  ? undefined
-  : nodeProcess.getBuiltinModule("node:fs");
+function getNodeFs(): any {
+  return nodeFs ??= nodeProcess.getBuiltinModule("node:fs");
+}
 
 /** Default implementation that interacts with the file system and process env vars. */
 export class RealEnvironment implements Environment {
   env(key: string): string | undefined {
-    if (isDeno) {
+    if (denoGlobal?.env) {
       return denoGlobal.env.get(key);
     }
     return nodeProcess.env[key];
   }
 
   async stat(path: string): Promise<{ isFile: boolean }> {
-    if (isDeno) {
+    if (denoGlobal?.stat) {
       return await denoGlobal.stat(path);
     }
-    const info = await nodeFs.promises.stat(path);
+    const info = await getNodeFs().promises.stat(path);
     return { isFile: info.isFile() };
   }
 
   statSync(path: string): { isFile: boolean } {
-    if (isDeno) {
+    if (denoGlobal?.statSync) {
       return denoGlobal.statSync(path);
     }
-    const info = nodeFs.statSync(path);
+    const info = getNodeFs().statSync(path);
     return { isFile: info.isFile() };
   }
 
   get isWindows(): boolean {
-    if (isDeno) {
+    if (denoGlobal?.build?.os) {
       return denoGlobal.build.os === "windows";
     }
     return nodeProcess.platform === "win32";
@@ -151,7 +151,8 @@ function pathMatchesSync(
 }
 
 function isPermissionDeniedError(err: unknown): boolean {
-  return isDeno && err instanceof denoGlobal.errors.PermissionDenied;
+  const permissionDeniedError = denoGlobal?.errors?.PermissionDenied;
+  return permissionDeniedError != null && err instanceof permissionDeniedError;
 }
 
 interface SystemInfo {
