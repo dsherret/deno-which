@@ -95,6 +95,56 @@ test("should get existent path when providing a custom system", async () => {
   });
 });
 
+test(
+  "should resolve a path-like command with .exe on windows",
+  { skip: !isWindows },
+  async () => {
+    await withTempDir(async (tempPath) => {
+      const exePath = path.join(tempPath, "my-custom-binary.exe");
+      fs.copyFileSync(expectedCurlLocation, exePath);
+      const relativePath = "./" + path.relative(process.cwd(), tempPath) + "/my-custom-binary";
+      equal(
+        (await which(relativePath))?.toLowerCase(),
+        (relativePath + ".exe").toLowerCase(),
+      );
+      equal(
+        whichSync(relativePath)?.toLowerCase(),
+        (relativePath + ".exe").toLowerCase(),
+      );
+      const absPath = path.join(tempPath, "my-custom-binary");
+      equal(
+        (await which(absPath))?.toLowerCase(),
+        exePath.toLowerCase(),
+      );
+      equal(
+        whichSync(absPath)?.toLowerCase(),
+        exePath.toLowerCase(),
+      );
+    });
+  },
+);
+
+test("should return path-like command as-is when file exists", async () => {
+  await withTempDir(async (tempPath) => {
+    const filePath = path.join(tempPath, "existing-file" + (isWindows ? ".exe" : ""));
+    fs.copyFileSync(expectedCurlLocation, filePath);
+    equal(
+      (await which(filePath))?.toLowerCase(),
+      filePath.toLowerCase(),
+    );
+    equal(
+      whichSync(filePath)?.toLowerCase(),
+      filePath.toLowerCase(),
+    );
+  });
+});
+
+test("should return undefined for a path-like command that doesn't exist", async () => {
+  const missing = path.join(os.tmpdir(), "definitely-missing-binary-xyz");
+  equal(await which(missing), undefined);
+  equal(whichSync(missing), undefined);
+});
+
 test("should get the path to a symlink", async () => {
   await withTempDir((tempPath) => {
     const newCurlPath = path.join(
