@@ -62,11 +62,34 @@ export class RealEnvironment implements Environment {
   }
 }
 
-/** Finds the path to the specified command asynchronously. */
+/** Finds the path to the specified command asynchronously.
+ *
+ * When the command contains a path separator (e.g. `./foo` or `/usr/bin/foo`),
+ * PATH is not searched. The file is resolved relative to the caller's context
+ * and, on Windows, PATHEXT extensions are tried if the literal path doesn't
+ * exist (so `./foo` resolves to `./foo.exe`).
+ */
 export async function which(
   command: string,
   environment: Omit<Environment, "statSync"> = new RealEnvironment(),
 ): Promise<string | undefined> {
+  if (commandHasPathSeparator(command, environment.isWindows)) {
+    if (await pathMatches(environment, command)) {
+      return command;
+    }
+    const pathExts = getPathExts(command, environment);
+    if (pathExts == null) {
+      return undefined;
+    }
+    for (const pathExt of pathExts) {
+      const filePath = command + pathExt;
+      if (await pathMatches(environment, filePath)) {
+        return filePath;
+      }
+    }
+    return undefined;
+  }
+
   const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
     return undefined;
@@ -106,11 +129,31 @@ async function pathMatches(
   }
 }
 
-/** Finds the path to the specified command synchronously. */
+/** Finds the path to the specified command synchronously.
+ *
+ * See {@link which} for the path-separator handling rules.
+ */
 export function whichSync(
   command: string,
   environment: Omit<Environment, "stat"> = new RealEnvironment(),
 ): string | undefined {
+  if (commandHasPathSeparator(command, environment.isWindows)) {
+    if (pathMatchesSync(environment, command)) {
+      return command;
+    }
+    const pathExts = getPathExts(command, environment);
+    if (pathExts == null) {
+      return undefined;
+    }
+    for (const pathExt of pathExts) {
+      const filePath = command + pathExt;
+      if (pathMatchesSync(environment, filePath)) {
+        return filePath;
+      }
+    }
+    return undefined;
+  }
+
   const systemInfo = getSystemInfo(command, environment);
   if (systemInfo == null) {
     return undefined;
@@ -166,7 +209,6 @@ function getSystemInfo(
   environment: Omit<Environment, "stat" | "statSync">,
 ): SystemInfo | undefined {
   const isWindows = environment.isWindows;
-  const envValueSeparator = isWindows ? ";" : ":";
   const path = environment.env("PATH");
   const pathSeparator = isWindows ? "\\" : "/";
   if (path == null) {
@@ -174,44 +216,54 @@ function getSystemInfo(
   }
 
   return {
-    pathItems: splitEnvValue(path).map((item) => normalizeDir(item)),
-    pathExts: getPathExts(),
+    pathItems: splitEnvValue(path, isWindows).map((item) =>
+      normalizeDir(item, pathSeparator)
+    ),
+    pathExts: getPathExts(command, environment),
     isNameMatch: isWindows
       ? (a, b) => a.toLowerCase() === b.toLowerCase()
       : (a, b) => a === b,
   };
+}
 
-  function getPathExts() {
-    if (!isWindows) {
+function getPathExts(
+  command: string,
+  environment: Pick<Environment, "isWindows" | "env">,
+): string[] | undefined {
+  if (!environment.isWindows) {
+    return undefined;
+  }
+
+  const pathExtText = environment.env("PATHEXT") ?? ".EXE;.CMD;.BAT;.COM";
+  const pathExts = splitEnvValue(pathExtText, true);
+  const lowerCaseCommand = command.toLowerCase();
+
+  for (const pathExt of pathExts) {
+    // Do not use the pathExts if someone has provided a command
+    // that ends with the extenion of an executable extension
+    if (lowerCaseCommand.endsWith(pathExt.toLowerCase())) {
       return undefined;
     }
-
-    const pathExtText = environment.env("PATHEXT") ?? ".EXE;.CMD;.BAT;.COM";
-    const pathExts = splitEnvValue(pathExtText);
-    const lowerCaseCommand = command.toLowerCase();
-
-    for (const pathExt of pathExts) {
-      // Do not use the pathExts if someone has provided a command
-      // that ends with the extenion of an executable extension
-      if (lowerCaseCommand.endsWith(pathExt.toLowerCase())) {
-        return undefined;
-      }
-    }
-
-    return pathExts;
   }
 
-  function splitEnvValue(value: string) {
-    return value
-      .split(envValueSeparator)
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0);
-  }
+  return pathExts;
+}
 
-  function normalizeDir(dirPath: string) {
-    if (!dirPath.endsWith(pathSeparator)) {
-      dirPath += pathSeparator;
-    }
-    return dirPath;
+function commandHasPathSeparator(command: string, isWindows: boolean): boolean {
+  return command.includes("/") || (isWindows && command.includes("\\"));
+}
+
+function splitEnvValue(value: string, isWindows: boolean) {
+  const envValueSeparator = isWindows ? ";" : ":";
+  return value
+    .split(envValueSeparator)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function normalizeDir(dirPath: string, pathSeparator: string) {
+  if (!dirPath.endsWith(pathSeparator)) {
+    dirPath += pathSeparator;
   }
+  return dirPath;
 }
