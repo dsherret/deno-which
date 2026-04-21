@@ -216,7 +216,9 @@ function getSystemInfo(
   }
 
   return {
-    pathItems: splitEnvValue(path, isWindows).map((item) => normalizeDir(item, pathSeparator)),
+    pathItems: splitEnvValue(path, isWindows).map((item) =>
+      normalizeDir(item, pathSeparator)
+    ),
     pathExts: getPathExts(command, environment),
     isNameMatch: isWindows
       ? (a, b) => a.toLowerCase() === b.toLowerCase()

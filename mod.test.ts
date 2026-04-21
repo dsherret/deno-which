@@ -102,7 +102,8 @@ test(
     await withTempDir(async (tempPath) => {
       const exePath = path.join(tempPath, "my-custom-binary.exe");
       fs.copyFileSync(expectedCurlLocation, exePath);
-      const relativePath = "./" + path.relative(process.cwd(), tempPath) + "/my-custom-binary";
+      const relativePath = "./" + path.relative(process.cwd(), tempPath) +
+        "/my-custom-binary";
       equal(
         (await which(relativePath))?.toLowerCase(),
         (relativePath + ".exe").toLowerCase(),
@@ -126,7 +127,10 @@ test(
 
 test("should return path-like command as-is when file exists", async () => {
   await withTempDir(async (tempPath) => {
-    const filePath = path.join(tempPath, "existing-file" + (isWindows ? ".exe" : ""));
+    const filePath = path.join(
+      tempPath,
+      "existing-file" + (isWindows ? ".exe" : ""),
+    );
     fs.copyFileSync(expectedCurlLocation, filePath);
     equal(
       (await which(filePath))?.toLowerCase(),
