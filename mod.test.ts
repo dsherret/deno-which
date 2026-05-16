@@ -1,5 +1,5 @@
 import { test } from "node:test";
-import { equal } from "node:assert/strict";
+import { equal, rejects, throws } from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -87,6 +87,28 @@ test("should get existent path when providing a custom system", async () => {
           throw new Error("Not found.");
         }
       },
+      lstat(p) {
+        p = p.replace(/\//g, "\\");
+        if (p === "C:\\test\\home\\asdfasdfasdfasdfasdf.EXE") {
+          return Promise.resolve({ isFile: true, isSymlink: false });
+        } else {
+          return Promise.reject(new Error("Not found."));
+        }
+      },
+      lstatSync(p) {
+        p = p.replace(/\//g, "\\");
+        if (p === "C:\\test\\home\\asdfasdfasdfasdfasdf.EXE") {
+          return { isFile: true, isSymlink: false };
+        } else {
+          throw new Error("Not found.");
+        }
+      },
+      readLink() {
+        return Promise.reject(new Error("not a symlink"));
+      },
+      readLinkSync() {
+        throw new Error("not a symlink");
+      },
       isWindows: true,
     };
     let result = await which("asdfasdfasdfasdfasdf", environment);
@@ -147,6 +169,155 @@ test("should return undefined for a path-like command that doesn't exist", async
   const missing = path.join(os.tmpdir(), "definitely-missing-binary-xyz");
   equal(await which(missing), undefined);
   equal(whichSync(missing), undefined);
+});
+
+const eaccesErr = Object.assign(new Error("EACCES"), { code: "EACCES" });
+const enoentErr = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+
+test("should fall back via lstat when stat fails with EACCES (Windows app exec alias)", async () => {
+  // Simulates a Windows Store app execution alias: stat fails (EACCES on
+  // the reparse point), but lstat reports the entry as a regular file.
+  await runTest(async (which) => {
+    const target = "C:\\WindowsApps\\winget.EXE";
+    const environment: Environment = {
+      env(key) {
+        if (key === "PATH") return "C:\\WindowsApps";
+        if (key === "PATHEXT") return ".EXE";
+        return undefined;
+      },
+      stat() {
+        return Promise.reject(eaccesErr);
+      },
+      statSync() {
+        throw eaccesErr;
+      },
+      lstat(p) {
+        return p.replace(/\//g, "\\") === target
+          ? Promise.resolve({ isFile: true, isSymlink: false })
+          : Promise.reject(enoentErr);
+      },
+      lstatSync(p) {
+        if (p.replace(/\//g, "\\") === target) {
+          return { isFile: true, isSymlink: false };
+        }
+        throw enoentErr;
+      },
+      readLink() {
+        return Promise.reject(new Error("not a symlink"));
+      },
+      readLinkSync() {
+        throw new Error("not a symlink");
+      },
+      isWindows: true,
+    };
+    const result = (await which("winget", environment))?.replace(/\//g, "\\");
+    equal(result, target);
+  });
+});
+
+test("should walk the symlink chain when stat fails with EACCES", async () => {
+  // A symlink in PATH whose target stat can't traverse. The library should
+  // follow it via lstat+readLink until reaching a regular file.
+  await runTest(async (which) => {
+    const link = "C:\\bin\\my-winget.EXE";
+    const finalTarget = "C:\\Apps\\winget.exe";
+    const environment: Environment = {
+      env(key) {
+        if (key === "PATH") return "C:\\bin";
+        if (key === "PATHEXT") return ".EXE";
+        return undefined;
+      },
+      stat() {
+        return Promise.reject(eaccesErr);
+      },
+      statSync() {
+        throw eaccesErr;
+      },
+      lstat(p) {
+        const n = p.replace(/\//g, "\\");
+        if (n === link) {
+          return Promise.resolve({ isFile: false, isSymlink: true });
+        }
+        if (n === finalTarget) {
+          return Promise.resolve({ isFile: true, isSymlink: false });
+        }
+        return Promise.reject(enoentErr);
+      },
+      lstatSync(p) {
+        const n = p.replace(/\//g, "\\");
+        if (n === link) return { isFile: false, isSymlink: true };
+        if (n === finalTarget) return { isFile: true, isSymlink: false };
+        throw enoentErr;
+      },
+      readLink(p) {
+        if (p.replace(/\//g, "\\") === link) {
+          return Promise.resolve(finalTarget);
+        }
+        return Promise.reject(new Error("not a symlink"));
+      },
+      readLinkSync(p) {
+        if (p.replace(/\//g, "\\") === link) return finalTarget;
+        throw new Error("not a symlink");
+      },
+      isWindows: true,
+    };
+    const result = (await which("my-winget", environment))?.replace(
+      /\//g,
+      "\\",
+    );
+    equal(result, link);
+  });
+});
+
+test("should rethrow Deno permission errors from stat", async () => {
+  // Simulates a Deno runtime permission denial: a PermissionDenied-style
+  // error without code "EACCES". Must NOT be silently swallowed.
+  class PermissionDenied extends Error {
+    constructor(msg: string) {
+      super(msg);
+      this.name = "PermissionDenied";
+    }
+  }
+  const denoPermErr = new PermissionDenied("Requires read access");
+  const environment: Environment = {
+    env(key) {
+      if (key === "PATH") return "/usr/bin";
+      return undefined;
+    },
+    stat() {
+      return Promise.reject(denoPermErr);
+    },
+    statSync() {
+      throw denoPermErr;
+    },
+    lstat() {
+      return Promise.reject(new Error("should not be called"));
+    },
+    lstatSync() {
+      throw new Error("should not be called");
+    },
+    readLink() {
+      return Promise.reject(new Error("should not be called"));
+    },
+    readLinkSync() {
+      throw new Error("should not be called");
+    },
+    isWindows: false,
+  };
+  // Stub Deno.errors.PermissionDenied for the instanceof check.
+  // deno-lint-ignore no-explicit-any
+  const deno = (globalThis as any).Deno;
+  if (deno != null) {
+    const prevPD = deno.errors?.PermissionDenied;
+    deno.errors = deno.errors ?? {};
+    deno.errors.PermissionDenied = PermissionDenied;
+    try {
+      await rejects(which("anything", environment), PermissionDenied);
+      throws(() => whichSync("anything", environment), PermissionDenied);
+    } finally {
+      deno.errors.PermissionDenied = prevPD;
+    }
+  }
 });
 
 test("should get the path to a symlink", async () => {
