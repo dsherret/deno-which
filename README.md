@@ -34,6 +34,23 @@ const pathToCurl = await which("curl", {
   statSync(filePath: string): { isFile: boolean } {
     // implement this
   },
+  // lstat/readLink are used as a fallback on Windows when stat throws
+  // with EACCES, to resolve Windows Store app execution aliases (and
+  // user-created symlinks pointing at them)
+  async lstat(
+    filePath: string,
+  ): Promise<{ isFile: boolean; isSymlink: boolean }> {
+    // implement this
+  },
+  lstatSync(filePath: string): { isFile: boolean; isSymlink: boolean } {
+    // implement this
+  },
+  async readLink(filePath: string): Promise<string> {
+    // implement this
+  },
+  readLinkSync(filePath: string): string {
+    // implement this
+  },
   env(key: string): string | undefined {
     // implement getting an environment variable
   },
