@@ -345,6 +345,84 @@ test("should get the path to a symlink", async () => {
   });
 });
 
+test("should resolve a command from a PATH entry that uses forward slashes on windows", async () => {
+  // stat here rejects mixed-slash paths, so it only matches fully backslashed.
+  await runTest(async (which) => {
+    const target = ".\\bin\\foo.CMD";
+    const environment: Environment = {
+      env(key) {
+        if (key === "PATH") return "./bin";
+        if (key === "PATHEXT") return ".CMD";
+        return undefined;
+      },
+      stat(p) {
+        return p === target
+          ? Promise.resolve({ isFile: true })
+          : Promise.reject(new Error("Not found."));
+      },
+      statSync(p) {
+        if (p === target) {
+          return { isFile: true };
+        }
+        throw new Error("Not found.");
+      },
+      lstat() {
+        return Promise.reject(new Error("not called"));
+      },
+      lstatSync() {
+        throw new Error("not called");
+      },
+      readLink() {
+        return Promise.reject(new Error("not a symlink"));
+      },
+      readLinkSync() {
+        throw new Error("not a symlink");
+      },
+      isWindows: true,
+    };
+    equal(await which("foo", environment), target);
+  });
+});
+
+test("should resolve a command from a UNC PATH entry that uses forward slashes on windows", async () => {
+  // The UNC root's leading "\\" must survive slash normalization.
+  await runTest(async (which) => {
+    const target = "\\\\server\\share\\foo.CMD";
+    const environment: Environment = {
+      env(key) {
+        if (key === "PATH") return "//server/share";
+        if (key === "PATHEXT") return ".CMD";
+        return undefined;
+      },
+      stat(p) {
+        return p === target
+          ? Promise.resolve({ isFile: true })
+          : Promise.reject(new Error("Not found."));
+      },
+      statSync(p) {
+        if (p === target) {
+          return { isFile: true };
+        }
+        throw new Error("Not found.");
+      },
+      lstat() {
+        return Promise.reject(new Error("not called"));
+      },
+      lstatSync() {
+        throw new Error("not called");
+      },
+      readLink() {
+        return Promise.reject(new Error("not a symlink"));
+      },
+      readLinkSync() {
+        throw new Error("not a symlink");
+      },
+      isWindows: true,
+    };
+    equal(await which("foo", environment), target);
+  });
+});
+
 async function runTest(
   action: (
     whichFunction: (

@@ -406,8 +406,20 @@ function splitEnvValue(value: string, isWindows: boolean) {
 }
 
 function normalizeDir(dirPath: string, pathSeparator: string) {
+  if (pathSeparator === "\\" && dirPath.includes("/")) {
+    dirPath = normalizeWindowsSeparators(dirPath, pathSeparator);
+  }
   if (!dirPath.endsWith(pathSeparator)) {
     dirPath += pathSeparator;
   }
   return dirPath;
+}
+
+function normalizeWindowsSeparators(dirPath: string, pathSeparator: string) {
+  // Preserve a UNC root's leading "\\"; collapse interior repeats only.
+  const isUncRoot = /^[/\\]{2}/.test(dirPath);
+  const head = isUncRoot ? pathSeparator + pathSeparator : "";
+  const rest = isUncRoot ? dirPath.slice(2) : dirPath;
+  return head +
+    rest.replaceAll("/", pathSeparator).replace(/\\+/g, pathSeparator);
 }
