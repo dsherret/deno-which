@@ -12,9 +12,6 @@ jobs:
   test:
     name: ${{ matrix.config.kind }} ${{ matrix.config.os }}
     runs-on: ${{ matrix.config.os }}
-    permissions:
-      contents: read
-      id-token: write
     strategy:
       matrix:
         config:
@@ -52,6 +49,22 @@ jobs:
 
       - name: Run tests (Node.js)
         run: node --test mod.test.ts
+
+  public:
+    name: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Setup repo
+        uses: actions/checkout@v6
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
 
       - name: Publish to JSR on tag
         if: startsWith(matrix.config.os, 'ubuntu')
