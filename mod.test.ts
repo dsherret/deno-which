@@ -269,26 +269,26 @@ test("should walk the symlink chain when stat fails with EACCES", async () => {
   });
 });
 
-test("should rethrow Deno permission errors from stat", async () => {
-  // Simulates a Deno runtime permission denial: a PermissionDenied-style
-  // error without code "EACCES". Must NOT be silently swallowed.
-  class PermissionDenied extends Error {
+test("should rethrow Deno NotCapable errors from stat", async () => {
+  // Simulates a Deno runtime permission denial (missing --allow-read):
+  // a NotCapable error. Must NOT be silently swallowed.
+  class NotCapable extends Error {
     constructor(msg: string) {
       super(msg);
-      this.name = "PermissionDenied";
+      this.name = "NotCapable";
     }
   }
-  const denoPermErr = new PermissionDenied("Requires read access");
+  const notCapableErr = new NotCapable("Requires read access");
   const environment: Environment = {
     env(key) {
       if (key === "PATH") return "/usr/bin";
       return undefined;
     },
     stat() {
-      return Promise.reject(denoPermErr);
+      return Promise.reject(notCapableErr);
     },
     statSync() {
-      throw denoPermErr;
+      throw notCapableErr;
     },
     lstat() {
       return Promise.reject(new Error("should not be called"));
@@ -304,20 +304,69 @@ test("should rethrow Deno permission errors from stat", async () => {
     },
     isWindows: false,
   };
-  // Stub Deno.errors.PermissionDenied for the instanceof check.
+  // Stub Deno.errors.NotCapable for the instanceof check.
   // deno-lint-ignore no-explicit-any
   const deno = (globalThis as any).Deno;
   if (deno != null) {
-    const prevPD = deno.errors?.PermissionDenied;
+    const prevNC = deno.errors?.NotCapable;
     deno.errors = deno.errors ?? {};
-    deno.errors.PermissionDenied = PermissionDenied;
+    deno.errors.NotCapable = NotCapable;
     try {
-      await rejects(which("anything", environment), PermissionDenied);
-      throws(() => whichSync("anything", environment), PermissionDenied);
+      await rejects(which("anything", environment), NotCapable);
+      throws(() => whichSync("anything", environment), NotCapable);
     } finally {
-      deno.errors.PermissionDenied = prevPD;
+      deno.errors.NotCapable = prevNC;
     }
   }
+});
+
+test("should skip PATH entries where stat fails with an os permission error", async () => {
+  // Simulates an inaccessible directory on PATH (e.g. running in a sandbox).
+  // Like bash, the search should continue to later PATH entries instead of
+  // throwing (https://github.com/dsherret/deno-which/issues/19).
+  class PermissionDenied extends Error {
+    code = "EPERM";
+    constructor(msg: string) {
+      super(msg);
+      this.name = "PermissionDenied";
+    }
+  }
+  const osPermErr = new PermissionDenied(
+    "Operation not permitted (os error 1)",
+  );
+  const environment: Environment = {
+    env(key) {
+      if (key === "PATH") return "/denied:/usr/bin";
+      return undefined;
+    },
+    stat(p) {
+      return Promise.resolve(this.statSync(p));
+    },
+    statSync(p) {
+      if (p.startsWith("/denied/")) {
+        throw osPermErr;
+      }
+      if (p === "/usr/bin/some-command") {
+        return { isFile: true };
+      }
+      throw new Error("not found");
+    },
+    lstat() {
+      return Promise.reject(new Error("should not be called"));
+    },
+    lstatSync() {
+      throw new Error("should not be called");
+    },
+    readLink() {
+      return Promise.reject(new Error("should not be called"));
+    },
+    readLinkSync() {
+      throw new Error("should not be called");
+    },
+    isWindows: false,
+  };
+  equal(await which("some-command", environment), "/usr/bin/some-command");
+  equal(whichSync("some-command", environment), "/usr/bin/some-command");
 });
 
 test("should get the path to a symlink", async () => {

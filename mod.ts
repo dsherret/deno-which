@@ -171,7 +171,7 @@ async function pathMatches(
   try {
     return (await environment.stat(path)).isFile;
   } catch (statErr) {
-    if (isDenoPermissionDeniedError(statErr)) {
+    if (isDenoNotCapableError(statErr)) {
       throw statErr;
     }
     // on Windows, EACCES on stat is the signal for Store app execution
@@ -194,7 +194,7 @@ async function followSymlinkChain(
     try {
       info = await environment.lstat(current);
     } catch (err) {
-      if (isDenoPermissionDeniedError(err)) {
+      if (isDenoNotCapableError(err)) {
         throw err;
       }
       return false;
@@ -205,7 +205,7 @@ async function followSymlinkChain(
     try {
       target = await environment.readLink(current);
     } catch (err) {
-      if (isDenoPermissionDeniedError(err)) {
+      if (isDenoNotCapableError(err)) {
         throw err;
       }
       return false;
@@ -272,7 +272,7 @@ function pathMatchesSync(
   try {
     return environment.statSync(path).isFile;
   } catch (statErr) {
-    if (isDenoPermissionDeniedError(statErr)) {
+    if (isDenoNotCapableError(statErr)) {
       throw statErr;
     }
     // see comment in pathMatches
@@ -293,7 +293,7 @@ function followSymlinkChainSync(
     try {
       info = environment.lstatSync(current);
     } catch (err) {
-      if (isDenoPermissionDeniedError(err)) {
+      if (isDenoNotCapableError(err)) {
         throw err;
       }
       return false;
@@ -304,7 +304,7 @@ function followSymlinkChainSync(
     try {
       target = environment.readLinkSync(current);
     } catch (err) {
-      if (isDenoPermissionDeniedError(err)) {
+      if (isDenoNotCapableError(err)) {
         throw err;
       }
       return false;
@@ -337,9 +337,9 @@ function isEaccesError(err: unknown): boolean {
     (err as { code?: unknown }).code === "EACCES";
 }
 
-function isDenoPermissionDeniedError(err: unknown): boolean {
-  const permissionDeniedError = denoGlobal?.errors?.PermissionDenied;
-  return permissionDeniedError != null && err instanceof permissionDeniedError;
+function isDenoNotCapableError(err: unknown): boolean {
+  const notCapableError = denoGlobal?.errors?.NotCapable;
+  return notCapableError != null && err instanceof notCapableError;
 }
 
 interface SystemInfo {
