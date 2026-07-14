@@ -67,5 +67,4 @@ jobs:
           deno-version: v2.x
 
       - name: Publish to JSR on tag
-        if: startsWith(matrix.config.os, 'ubuntu')
         run: deno run -A jsr:@david/publish-on-tag@0.2.0
