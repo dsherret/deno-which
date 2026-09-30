@@ -1,6 +1,7 @@
 # deno-which
 
-[![deno doc](https://jsr.io/badges/@david/which)](https://jsr.io/@david/which)
+[![JSR](https://jsr.io/badges/@david/which)](https://jsr.io/@david/which)
+[![npm](https://img.shields.io/npm/v/@dsherret/which)](https://www.npmjs.com/package/@dsherret/which)
 
 Finds the path to the specified command. Works in Deno and Node.js.
 
@@ -9,7 +10,7 @@ Finds the path to the specified command. Works in Deno and Node.js.
 > deno add @david/which
 
 # Node.js
-> npx jsr add @david/which
+> npm install @dsherret/which
 ```
 
 ```ts
