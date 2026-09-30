@@ -16,6 +16,6 @@
   ],
   "imports": {
     "@david/publish-on-tag": "jsr:@david/publish-on-tag@^0.2.0",
-    "@deno/dnt": "jsr:@deno/dnt@^0.42.3"
+    "@deno/dnt": "jsr:@deno/dnt@^0.43.2"
   }
 }
