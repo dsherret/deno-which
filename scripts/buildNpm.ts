@@ -42,7 +42,6 @@ await build({
     },
   },
   async postBuild() {
-    await addDefaultExportCondition();
     Deno.copyFileSync("LICENSE", "npm/LICENSE");
     const readme = await Deno.readTextFile("README.md");
     await Deno.writeTextFile(
@@ -51,16 +50,3 @@ await build({
     );
   },
 });
-
-// todo: remove once dnt is released with https://github.com/denoland/dnt/pull/528
-/** Allows requiring the package in Node.js versions that support require(esm). */
-async function addDefaultExportCondition() {
-  const packageJsonPath = "npm/package.json";
-  const packageJson = JSON.parse(await Deno.readTextFile(packageJsonPath));
-  const mainExport = packageJson.exports["."];
-  mainExport.default = mainExport.import;
-  await Deno.writeTextFile(
-    packageJsonPath,
-    JSON.stringify(packageJson, undefined, 2) + "\n",
-  );
-}

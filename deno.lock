@@ -4,7 +4,7 @@
     "jsr:@david/code-block-writer@^13.0.3": "13.0.3",
     "jsr:@david/publish-on-tag@0.2": "0.2.0",
     "jsr:@david/publish-on-tag@0.2.0": "0.2.0",
-    "jsr:@deno/dnt@~0.43.2": "0.43.2",
+    "jsr:@deno/dnt@0.44": "0.44.0",
     "jsr:@std/fmt@1": "1.0.10",
     "jsr:@std/fs@1": "1.0.24",
     "jsr:@std/internal@^1.0.14": "1.0.14",
@@ -24,8 +24,8 @@
         "jsr:@std/semver"
       ]
     },
-    "@deno/dnt@0.43.2": {
-      "integrity": "8068703a782f389d9fcb4ead32809ca666d3b088262a23f1d9016cbc9af5d37f",
+    "@deno/dnt@0.44.0": {
+      "integrity": "87f4cf9f6b87f5d443ed981781440c21106c7097bed07f9b58a5dcaf0d1e7289",
       "dependencies": [
         "jsr:@david/code-block-writer",
         "jsr:@std/fmt",
@@ -73,7 +73,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@david/publish-on-tag@0.2",
-      "jsr:@deno/dnt@~0.43.2"
+      "jsr:@deno/dnt@0.44"
     ]
   }
 }
