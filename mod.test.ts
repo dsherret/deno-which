@@ -420,8 +420,9 @@ test("should skip files without execute permission on non-windows", async () => 
     // no mode provided, so execute permission can't be checked
     equal(await which("no-mode", environment), "/a/no-mode");
     equal(await which("null-mode", environment), "/a/null-mode");
-    // path-like commands are checked as well
-    equal(await which("/a/mytool", environment), undefined);
+    // path-like commands aren't checked so callers can decide how to run
+    // them (e.g. by reading the shebang)
+    equal(await which("/a/mytool", environment), "/a/mytool");
     equal(await which("/b/mytool", environment), "/b/mytool");
 
     // mode is ignored on windows
@@ -460,8 +461,9 @@ test(
       try {
         equal(await which("mytool"), execPath);
         equal(whichSync("mytool"), execPath);
-        equal(await which(nonExecPath), undefined);
-        equal(whichSync(nonExecPath), undefined);
+        // path-like commands aren't checked
+        equal(await which(nonExecPath), nonExecPath);
+        equal(whichSync(nonExecPath), nonExecPath);
       } finally {
         if (originalPath != null) {
           process.env.PATH = originalPath;

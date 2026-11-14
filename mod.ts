@@ -4,7 +4,8 @@ export interface Environment {
   /** Resolves the file info for the specified path following symlinks.
    *
    * On non-Windows systems, when `mode` is provided, files without any
-   * execute permission bit set are skipped like in POSIX command search.
+   * execute permission bit set are skipped when searching PATH like in
+   * POSIX command search.
    */
   stat(filePath: string): Promise<StatInfo>;
   /** Synchronously resolves the file info for the specified path
@@ -44,8 +45,8 @@ export interface StatInfo {
   /** Whether the path is a regular file. */
   isFile: boolean;
   /** The file's permission bits. Used to check for execute permission on
-   * non-Windows systems. When `null` or not provided, the execute
-   * permission is not checked.
+   * non-Windows systems when searching PATH. When `null` or not provided,
+   * the execute permission is not checked.
    */
   mode?: number | null;
 }
@@ -131,7 +132,12 @@ export class RealEnvironment implements Environment {
  * When the command contains a path separator (e.g. `./foo` or `/usr/bin/foo`),
  * PATH is not searched. The file is resolved relative to the caller's context
  * and, on Windows, PATHEXT extensions are tried if the literal path doesn't
- * exist (so `./foo` resolves to `./foo.exe`).
+ * exist (so `./foo` resolves to `./foo.exe`). The file's execute permission
+ * is not checked in this case so callers can decide how to run it (e.g. by
+ * reading its shebang).
+ *
+ * When searching PATH on non-Windows systems, files without any execute
+ * permission bit set are skipped.
  */
 export async function which(
   command: string,
@@ -171,7 +177,9 @@ export async function which(
           return filePath;
         }
       }
-    } else if (await pathMatches(environment, filePath)) {
+    } else if (
+      await pathMatches(environment, filePath, { requireExecutable: true })
+    ) {
       return filePath;
     }
   }
@@ -182,9 +190,10 @@ export async function which(
 async function pathMatches(
   environment: Omit<Environment, "statSync" | "lstatSync" | "readLinkSync">,
   path: string,
+  options?: PathMatchOptions,
 ): Promise<boolean> {
   try {
-    return isExecutableFile(await environment.stat(path), environment);
+    return isMatchingFile(await environment.stat(path), environment, options);
   } catch (statErr) {
     if (isDenoNotCapableError(statErr)) {
       throw statErr;
@@ -232,7 +241,8 @@ async function followSymlinkChain(
 
 /** Finds the path to the specified command synchronously.
  *
- * See {@link which} for the path-separator handling rules.
+ * See {@link which} for the path-separator and execute permission handling
+ * rules.
  */
 export function whichSync(
   command: string,
@@ -272,7 +282,9 @@ export function whichSync(
           return filePath;
         }
       }
-    } else if (pathMatchesSync(environment, filePath)) {
+    } else if (
+      pathMatchesSync(environment, filePath, { requireExecutable: true })
+    ) {
       return filePath;
     }
   }
@@ -283,9 +295,10 @@ export function whichSync(
 function pathMatchesSync(
   environment: Omit<Environment, "stat" | "lstat" | "readLink">,
   path: string,
+  options?: PathMatchOptions,
 ): boolean {
   try {
-    return isExecutableFile(environment.statSync(path), environment);
+    return isMatchingFile(environment.statSync(path), environment, options);
   } catch (statErr) {
     if (isDenoNotCapableError(statErr)) {
       throw statErr;
@@ -329,15 +342,24 @@ function followSymlinkChainSync(
   return false;
 }
 
-function isExecutableFile(
+interface PathMatchOptions {
+  /** Whether to skip files without any execute permission bit set on
+   * non-Windows systems. */
+  requireExecutable: boolean;
+}
+
+function isMatchingFile(
   info: StatInfo,
   environment: Pick<Environment, "isWindows">,
+  options: PathMatchOptions | undefined,
 ): boolean {
   if (!info.isFile) {
     return false;
   }
-  // like POSIX command search, skip files without any execute bit set
-  if (!environment.isWindows && info.mode != null) {
+  // like POSIX command search, skip files on PATH without any execute bit set
+  if (
+    options?.requireExecutable && !environment.isWindows && info.mode != null
+  ) {
     return (info.mode & 0o111) !== 0;
   }
   return true;
