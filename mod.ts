@@ -1,12 +1,16 @@
 export interface Environment {
   /** Gets an environment variable. */
   env(key: string): string | undefined;
-  /** Resolves the file info for the specified path following symlinks. */
-  stat(filePath: string): Promise<{ isFile: boolean }>;
+  /** Resolves the file info for the specified path following symlinks.
+   *
+   * On non-Windows systems, when `mode` is provided, files without any
+   * execute permission bit set are skipped like in POSIX command search.
+   */
+  stat(filePath: string): Promise<StatInfo>;
   /** Synchronously resolves the file info for the specified path
    * following symlinks.
    */
-  statSync(filePath: string): { isFile: boolean };
+  statSync(filePath: string): StatInfo;
   /** Resolves the file info for the specified path without following symlinks.
    *
    * On Windows, the library falls back to this when {@link Environment.stat}
@@ -35,6 +39,17 @@ export interface Environment {
   requestPermission?(folderPath: string): void;
 }
 
+/** File info returned by {@link Environment.stat}. */
+export interface StatInfo {
+  /** Whether the path is a regular file. */
+  isFile: boolean;
+  /** The file's permission bits. Used to check for execute permission on
+   * non-Windows systems. When `null` or not provided, the execute
+   * permission is not checked.
+   */
+  mode?: number | null;
+}
+
 // dnt-shim-ignore
 // deno-lint-ignore no-explicit-any
 const denoGlobal: any = (globalThis as any).Deno;
@@ -55,20 +70,20 @@ export class RealEnvironment implements Environment {
     return nodeProcess.env[key];
   }
 
-  async stat(path: string): Promise<{ isFile: boolean }> {
+  async stat(path: string): Promise<StatInfo> {
     if (denoGlobal?.stat) {
       return await denoGlobal.stat(path);
     }
     const info = await getNodeFs().promises.stat(path);
-    return { isFile: info.isFile() };
+    return { isFile: info.isFile(), mode: info.mode };
   }
 
-  statSync(path: string): { isFile: boolean } {
+  statSync(path: string): StatInfo {
     if (denoGlobal?.statSync) {
       return denoGlobal.statSync(path);
     }
     const info = getNodeFs().statSync(path);
-    return { isFile: info.isFile() };
+    return { isFile: info.isFile(), mode: info.mode };
   }
 
   async lstat(
@@ -169,7 +184,7 @@ async function pathMatches(
   path: string,
 ): Promise<boolean> {
   try {
-    return (await environment.stat(path)).isFile;
+    return isExecutableFile(await environment.stat(path), environment);
   } catch (statErr) {
     if (isDenoNotCapableError(statErr)) {
       throw statErr;
@@ -270,7 +285,7 @@ function pathMatchesSync(
   path: string,
 ): boolean {
   try {
-    return environment.statSync(path).isFile;
+    return isExecutableFile(environment.statSync(path), environment);
   } catch (statErr) {
     if (isDenoNotCapableError(statErr)) {
       throw statErr;
@@ -312,6 +327,20 @@ function followSymlinkChainSync(
     current = resolveLinkTarget(current, target);
   }
   return false;
+}
+
+function isExecutableFile(
+  info: StatInfo,
+  environment: Pick<Environment, "isWindows">,
+): boolean {
+  if (!info.isFile) {
+    return false;
+  }
+  // like POSIX command search, skip files without any execute bit set
+  if (!environment.isWindows && info.mode != null) {
+    return (info.mode & 0o111) !== 0;
+  }
+  return true;
 }
 
 function resolveLinkTarget(linkPath: string, target: string): string {

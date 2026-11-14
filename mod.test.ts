@@ -369,6 +369,110 @@ test("should skip PATH entries where stat fails with an os permission error", as
   equal(whichSync("some-command", environment), "/usr/bin/some-command");
 });
 
+test("should skip files without execute permission on non-windows", async () => {
+  // https://github.com/dsherret/deno-which/issues/25
+  const modes: Record<string, number | null | undefined> = {
+    "/a/mytool": 0o644,
+    "/b/mytool": 0o755,
+    "/a/other": 0o644,
+    "/a/user-exec": 0o744,
+    "/a/no-mode": undefined,
+    "/a/null-mode": null,
+  };
+  function createEnvironment(isWindows: boolean): Environment {
+    return {
+      env(key) {
+        if (key === "PATH") return isWindows ? "/a;/b" : "/a:/b";
+        if (key === "PATHEXT") return ".EXE";
+        return undefined;
+      },
+      stat(p) {
+        return Promise.resolve(this.statSync(p));
+      },
+      statSync(p) {
+        p = p.replaceAll("\\", "/");
+        if (p in modes) {
+          return { isFile: true, mode: modes[p] };
+        }
+        throw new Error("not found");
+      },
+      lstat() {
+        return Promise.reject(new Error("should not be called"));
+      },
+      lstatSync() {
+        throw new Error("should not be called");
+      },
+      readLink() {
+        return Promise.reject(new Error("should not be called"));
+      },
+      readLinkSync() {
+        throw new Error("should not be called");
+      },
+      isWindows,
+    };
+  }
+
+  await runTest(async (which) => {
+    const environment = createEnvironment(false);
+    equal(await which("mytool", environment), "/b/mytool");
+    equal(await which("other", environment), undefined);
+    equal(await which("user-exec", environment), "/a/user-exec");
+    // no mode provided, so execute permission can't be checked
+    equal(await which("no-mode", environment), "/a/no-mode");
+    equal(await which("null-mode", environment), "/a/null-mode");
+    // path-like commands are checked as well
+    equal(await which("/a/mytool", environment), undefined);
+    equal(await which("/b/mytool", environment), "/b/mytool");
+
+    // mode is ignored on windows
+    equal(
+      await which("other.exe", {
+        ...createEnvironment(true),
+        statSync(p) {
+          if (p === "\\a\\other.exe") {
+            return { isFile: true, mode: 0o644 };
+          }
+          throw new Error("not found");
+        },
+      }),
+      "\\a\\other.exe",
+    );
+  });
+});
+
+test(
+  "should skip non-executable files on PATH",
+  { skip: isWindows },
+  async () => {
+    await withTempDir(async (tempPath) => {
+      const dirA = path.join(tempPath, "a");
+      const dirB = path.join(tempPath, "b");
+      fs.mkdirSync(dirA);
+      fs.mkdirSync(dirB);
+      const nonExecPath = path.join(dirA, "mytool");
+      const execPath = path.join(dirB, "mytool");
+      fs.writeFileSync(nonExecPath, "data\n", { mode: 0o644 });
+      fs.writeFileSync(execPath, "#!/bin/sh\necho hi\n", { mode: 0o755 });
+      fs.chmodSync(nonExecPath, 0o644);
+      fs.chmodSync(execPath, 0o755);
+      const originalPath = process.env.PATH;
+      process.env.PATH = dirA + ":" + dirB;
+      try {
+        equal(await which("mytool"), execPath);
+        equal(whichSync("mytool"), execPath);
+        equal(await which(nonExecPath), undefined);
+        equal(whichSync(nonExecPath), undefined);
+      } finally {
+        if (originalPath != null) {
+          process.env.PATH = originalPath;
+        } else {
+          delete process.env.PATH;
+        }
+      }
+    });
+  },
+);
+
 test("should get the path to a symlink", async () => {
   await withTempDir((tempPath) => {
     const newCurlPath = path.join(
