@@ -4,8 +4,8 @@ export interface Environment {
   /** Resolves the file info for the specified path following symlinks.
    *
    * On non-Windows systems, when `mode` is provided, files without any
-   * execute permission bit set are skipped when searching PATH like in
-   * POSIX command search.
+   * execute permission bit set are skipped like in POSIX command search
+   * (see {@link WhichOptions.requireExecutable}).
    */
   stat(filePath: string): Promise<StatInfo>;
   /** Synchronously resolves the file info for the specified path
@@ -45,10 +45,25 @@ export interface StatInfo {
   /** Whether the path is a regular file. */
   isFile: boolean;
   /** The file's permission bits. Used to check for execute permission on
-   * non-Windows systems when searching PATH. When `null` or not provided,
-   * the execute permission is not checked.
+   * non-Windows systems. When `null` or not provided, the execute
+   * permission is not checked.
    */
   mode?: number | null;
+}
+
+/** Options for {@link which} and {@link whichSync}. */
+export interface WhichOptions {
+  /** Whether to skip files without any execute permission bit set on
+   * non-Windows systems, like POSIX command search does.
+   *
+   * Set this to `false` to resolve files regardless of their execute
+   * permission (e.g. when the caller runs scripts by reading their shebang).
+   *
+   * Ignored on Windows.
+   *
+   * @default {true}
+   */
+  requireExecutable?: boolean;
 }
 
 // dnt-shim-ignore
@@ -132,20 +147,20 @@ export class RealEnvironment implements Environment {
  * When the command contains a path separator (e.g. `./foo` or `/usr/bin/foo`),
  * PATH is not searched. The file is resolved relative to the caller's context
  * and, on Windows, PATHEXT extensions are tried if the literal path doesn't
- * exist (so `./foo` resolves to `./foo.exe`). The file's execute permission
- * is not checked in this case so callers can decide how to run it (e.g. by
- * reading its shebang).
+ * exist (so `./foo` resolves to `./foo.exe`).
  *
- * When searching PATH on non-Windows systems, files without any execute
- * permission bit set are skipped.
+ * On non-Windows systems, files without any execute permission bit set are
+ * skipped unless {@link WhichOptions.requireExecutable} is `false`.
  */
 export async function which(
   command: string,
   environment: Omit<Environment, "statSync" | "lstatSync" | "readLinkSync"> =
     new RealEnvironment(),
+  options: WhichOptions = {},
 ): Promise<string | undefined> {
+  const requireExecutable = options.requireExecutable ?? true;
   if (commandHasPathSeparator(command, environment.isWindows)) {
-    if (await pathMatches(environment, command)) {
+    if (await pathMatches(environment, command, requireExecutable)) {
       return command;
     }
     const pathExts = getPathExts(command, environment);
@@ -154,7 +169,7 @@ export async function which(
     }
     for (const pathExt of pathExts) {
       const filePath = command + pathExt;
-      if (await pathMatches(environment, filePath)) {
+      if (await pathMatches(environment, filePath, requireExecutable)) {
         return filePath;
       }
     }
@@ -173,13 +188,11 @@ export async function which(
 
       for (const pathExt of systemInfo.pathExts) {
         const filePath = pathItem + command + pathExt;
-        if (await pathMatches(environment, filePath)) {
+        if (await pathMatches(environment, filePath, requireExecutable)) {
           return filePath;
         }
       }
-    } else if (
-      await pathMatches(environment, filePath, { requireExecutable: true })
-    ) {
+    } else if (await pathMatches(environment, filePath, requireExecutable)) {
       return filePath;
     }
   }
@@ -190,10 +203,14 @@ export async function which(
 async function pathMatches(
   environment: Omit<Environment, "statSync" | "lstatSync" | "readLinkSync">,
   path: string,
-  options?: PathMatchOptions,
+  requireExecutable: boolean,
 ): Promise<boolean> {
   try {
-    return isMatchingFile(await environment.stat(path), environment, options);
+    return isMatchingFile(
+      await environment.stat(path),
+      environment,
+      requireExecutable,
+    );
   } catch (statErr) {
     if (isDenoNotCapableError(statErr)) {
       throw statErr;
@@ -248,9 +265,11 @@ export function whichSync(
   command: string,
   environment: Omit<Environment, "stat" | "lstat" | "readLink"> =
     new RealEnvironment(),
+  options: WhichOptions = {},
 ): string | undefined {
+  const requireExecutable = options.requireExecutable ?? true;
   if (commandHasPathSeparator(command, environment.isWindows)) {
-    if (pathMatchesSync(environment, command)) {
+    if (pathMatchesSync(environment, command, requireExecutable)) {
       return command;
     }
     const pathExts = getPathExts(command, environment);
@@ -259,7 +278,7 @@ export function whichSync(
     }
     for (const pathExt of pathExts) {
       const filePath = command + pathExt;
-      if (pathMatchesSync(environment, filePath)) {
+      if (pathMatchesSync(environment, filePath, requireExecutable)) {
         return filePath;
       }
     }
@@ -278,13 +297,11 @@ export function whichSync(
 
       for (const pathExt of systemInfo.pathExts) {
         const filePath = pathItem + command + pathExt;
-        if (pathMatchesSync(environment, filePath)) {
+        if (pathMatchesSync(environment, filePath, requireExecutable)) {
           return filePath;
         }
       }
-    } else if (
-      pathMatchesSync(environment, filePath, { requireExecutable: true })
-    ) {
+    } else if (pathMatchesSync(environment, filePath, requireExecutable)) {
       return filePath;
     }
   }
@@ -295,10 +312,14 @@ export function whichSync(
 function pathMatchesSync(
   environment: Omit<Environment, "stat" | "lstat" | "readLink">,
   path: string,
-  options?: PathMatchOptions,
+  requireExecutable: boolean,
 ): boolean {
   try {
-    return isMatchingFile(environment.statSync(path), environment, options);
+    return isMatchingFile(
+      environment.statSync(path),
+      environment,
+      requireExecutable,
+    );
   } catch (statErr) {
     if (isDenoNotCapableError(statErr)) {
       throw statErr;
@@ -342,23 +363,17 @@ function followSymlinkChainSync(
   return false;
 }
 
-interface PathMatchOptions {
-  /** Whether to skip files without any execute permission bit set on
-   * non-Windows systems. */
-  requireExecutable: boolean;
-}
-
 function isMatchingFile(
   info: StatInfo,
   environment: Pick<Environment, "isWindows">,
-  options: PathMatchOptions | undefined,
+  requireExecutable: boolean,
 ): boolean {
   if (!info.isFile) {
     return false;
   }
-  // like POSIX command search, skip files on PATH without any execute bit set
+  // like POSIX command search, skip files without any execute bit set
   if (
-    options?.requireExecutable && !environment.isWindows && info.mode != null
+    requireExecutable && !environment.isWindows && info.mode != null
   ) {
     return (info.mode & 0o111) !== 0;
   }
