@@ -5,7 +5,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import process from "node:process";
-import { type Environment, which, whichSync } from "./mod.ts";
+import {
+  type Environment,
+  RealEnvironment,
+  which,
+  type WhichOptions,
+  whichSync,
+} from "./mod.ts";
 
 const isWindows = process.platform === "win32";
 const expectedCurlLocation = getLocation("curl");
@@ -424,6 +430,12 @@ test("should skip files without execute permission on non-windows", async () => 
     equal(await which("/a/mytool", environment), undefined);
     equal(await which("/b/mytool", environment), "/b/mytool");
 
+    // opting out of the check
+    const options = { requireExecutable: false };
+    equal(await which("mytool", environment, options), "/a/mytool");
+    equal(await which("other", environment, options), "/a/other");
+    equal(await which("/a/mytool", environment, options), "/a/mytool");
+
     // mode is ignored on windows
     equal(
       await which("other.exe", {
@@ -462,6 +474,12 @@ test(
         equal(whichSync("mytool"), execPath);
         equal(await which(nonExecPath), undefined);
         equal(whichSync(nonExecPath), undefined);
+        const options = { requireExecutable: false };
+        const env = new RealEnvironment();
+        equal(await which("mytool", env, options), nonExecPath);
+        equal(whichSync("mytool", env, options), nonExecPath);
+        equal(await which(nonExecPath, env, options), nonExecPath);
+        equal(whichSync(nonExecPath, env, options), nonExecPath);
       } finally {
         if (originalPath != null) {
           process.env.PATH = originalPath;
@@ -581,13 +599,14 @@ async function runTest(
     whichFunction: (
       cmd: string,
       environment?: Environment,
+      options?: WhichOptions,
     ) => Promise<string | undefined>,
   ) => Promise<void>,
 ) {
   await action(which);
-  await action((cmd, environment) => {
+  await action((cmd, environment, options) => {
     try {
-      return Promise.resolve(whichSync(cmd, environment));
+      return Promise.resolve(whichSync(cmd, environment, options));
     } catch (err) {
       return Promise.reject(err);
     }
